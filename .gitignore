@@ -1,0 +1,57 @@
+# Visual Studio Build Artifacts
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+ARM64EC/
+build/
+bin/
+obj/
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# Visual Studio temporary files
+*.sdf
+*.opensdf
+*.ipch
+*.aps
+*.ncb
+*.tlog
+*.log
+*.pch
+*.pdb
+*.idb
+*.iobj
+*.ipdb
+*.obj
+*.lib
+*.exp
+*.dll
+*.exe
+*.fb2k-component
+*.ilk
+*.manifest
+*.res
+*.rc.res
+
+# Build scripts and logs
+build_log*.txt
+*.bat.log
+foobar2000/foo_sample/build_log*.txt
+
+# Compilers and Toolchains
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Documentation / backup
+*.bak
+*.tmp
+*~
