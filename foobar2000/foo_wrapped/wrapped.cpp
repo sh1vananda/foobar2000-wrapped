@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <vector>
 #include "../../pfc/filetimetools.h"
+#include "resource.h"
+#include <SDK/coreDarkMode.h>
 
 namespace {
 	// {6E2A7F5A-1F7C-4A1B-8A3D-2E5F60708090}
@@ -19,6 +21,7 @@ namespace {
 		t_filetimestamp last_played = 0;
 		pfc::string8 artist;
 		pfc::string8 title;
+		pfc::string8 album;
 	};
 
 	static metadb_index_manager::ptr theAPI() {
@@ -56,6 +59,7 @@ namespace {
 				reader >> ret.last_played;
 				reader >> ret.artist;
 				reader >> ret.title;
+				if (reader.get_remaining() > 0) reader >> ret.album;
 				return ret;
 			} catch (std::exception const&) {}
 		}
@@ -69,6 +73,7 @@ namespace {
 		writer << rec.last_played;
 		writer << rec.artist;
 		writer << rec.title;
+		writer << rec.album;
 		theAPI()->set_user_data(guid_wrapped_index, hash, writer.m_buffer.get_ptr(), writer.m_buffer.get_size());
 	}
 
@@ -96,24 +101,24 @@ namespace {
 				rec.total_time += p_item->get_length();
 				rec.last_played = filetimestamp_from_system_timer();
 				
-				// Ensure we have metadata even if not in library
-				if (rec.artist.is_empty() || rec.title.is_empty()) {
-					auto compiler = static_api_ptr_t<titleformat_compiler>();
-					service_ptr_t<titleformat_object> fmtArtist, fmtTitle;
-					compiler->compile_force(fmtArtist, "%artist%");
-					compiler->compile_force(fmtTitle, "%title%");
+				auto compiler = static_api_ptr_t<titleformat_compiler>();
+				service_ptr_t<titleformat_object> fmtArtist, fmtTitle, fmtAlbum;
+				compiler->compile_force(fmtArtist, "%artist%");
+				compiler->compile_force(fmtTitle, "%title%");
+				compiler->compile_force(fmtAlbum, "%album%");
 
-					p_item->format_title(nullptr, rec.artist, fmtArtist, nullptr);
-					p_item->format_title(nullptr, rec.title, fmtTitle, nullptr);
-					
-					if (rec.artist.is_empty()) rec.artist = "Unknown Artist";
-					if (rec.title.is_empty()) rec.title = "Unknown Title";
-				}
+				p_item->format_title(nullptr, rec.artist, fmtArtist, nullptr);
+				p_item->format_title(nullptr, rec.title, fmtTitle, nullptr);
+				p_item->format_title(nullptr, rec.album, fmtAlbum, nullptr);
+				
+				if (rec.artist.is_empty()) rec.artist = "Unknown Artist";
+				if (rec.title.is_empty()) rec.title = "Unknown Title";
+				if (rec.album.is_empty()) rec.album = "Unknown Album";
 
 				record_set(hash, rec);
 				theAPI()->dispatch_refresh(guid_wrapped_index, hash);
 
-				FB2K_console_formatter() << "[Wrapped] Track played: " << rec.artist << " - " << rec.title << ". Total plays: " << rec.play_count;
+				FB2K_console_formatter() << "[Wrapped] Track played: " << rec.artist << " - " << rec.title << " [" << rec.album << "]. Total plays: " << rec.play_count;
 			}
 		}
 	};
@@ -130,6 +135,68 @@ namespace {
 		return out.c_str();
 	}
 
+	struct stat_entry_t {
+		pfc::string8 name;
+		uint32_t plays;
+		double time;
+	};
+
+	static void copy_to_clipboard(HWND wnd, const char* text) {
+		if (OpenClipboard(wnd)) {
+			EmptyClipboard();
+			pfc::stringcvt::string_wide_from_utf8 wtext(text);
+			size_t size = (wtext.length() + 1) * sizeof(wchar_t);
+			HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+			if (hMem) {
+				void* pMem = GlobalLock(hMem);
+				if (pMem) {
+					memcpy(pMem, wtext.get_ptr(), size);
+					GlobalUnlock(hMem);
+					SetClipboardData(CF_UNICODETEXT, hMem);
+				}
+			}
+			CloseClipboard();
+		}
+	}
+
+	struct DlgContext {
+		const char* report;
+		fb2k::CCoreDarkModeHooks hooks;
+	};
+
+	static INT_PTR CALLBACK WrappedDlgProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
+		switch (msg) {
+		case WM_INITDIALOG:
+			{
+				DlgContext* ctx = (DlgContext*)lp;
+				SetProp(wnd, L"DLG_CONTEXT", (HANDLE)ctx);
+				
+				ctx->hooks.AddDialogWithControls(wnd);
+
+				SetDlgItemTextW(wnd, IDC_REPORT_EDIT, pfc::stringcvt::string_wide_from_utf8(ctx->report).get_ptr());
+			}
+			return TRUE;
+		case WM_COMMAND:
+			switch (LOWORD(wp)) {
+			case IDOK:
+			case IDCANCEL:
+				EndDialog(wnd, LOWORD(wp));
+				break;
+			case IDC_COPY_CLIPBOARD:
+				{
+					DlgContext* ctx = (DlgContext*)GetProp(wnd, L"DLG_CONTEXT");
+					if (ctx && ctx->report) copy_to_clipboard(wnd, ctx->report);
+				}
+				break;
+			}
+			break;
+		case WM_DESTROY:
+			RemoveProp(wnd, L"DLG_CONTEXT");
+			break;
+		}
+		return FALSE;
+	}
+
 	class wrapped_mainmenu : public mainmenu_commands {
 	public:
 		t_uint32 get_command_count() override { return 1; }
@@ -141,46 +208,79 @@ namespace {
 			pfc::list_t<metadb_index_hash> hashes;
 			theAPI()->get_all_hashes(guid_wrapped_index, hashes);
 			
-			struct entry_t {
-				metadb_index_hash hash;
-				wrapped_record_t rec;
-			};
-			std::vector<entry_t> all_stats;
+			std::vector<wrapped_record_t> all_records;
+			std::map<pfc::string8, std::pair<uint32_t, double>> artist_stats;
+			std::map<pfc::string8, std::pair<uint32_t, double>> album_stats;
+			
 			double total_global_time = 0;
 			uint32_t total_global_plays = 0;
 
 			for (size_t i = 0; i < hashes.get_count(); ++i) {
 				wrapped_record_t rec = record_get(hashes[i]);
 				if (rec.play_count > 0) {
-					all_stats.push_back({ hashes[i], rec });
+					all_records.push_back(rec);
 					total_global_time += rec.total_time;
 					total_global_plays += rec.play_count;
+					
+					artist_stats[rec.artist].first += rec.play_count;
+					artist_stats[rec.artist].second += rec.total_time;
+					
+					pfc::string8 album_key;
+					album_key << rec.artist << " - " << rec.album;
+					album_stats[album_key].first += rec.play_count;
+					album_stats[album_key].second += rec.total_time;
 				}
 			}
 
-			std::sort(all_stats.begin(), all_stats.end(), [](const entry_t& a, const entry_t& b) {
-				return a.rec.play_count > b.rec.play_count;
+			auto sort_stats = [](const std::map<pfc::string8, std::pair<uint32_t, double>>& src) {
+				std::vector<stat_entry_t> v;
+				for (auto const& [name, stats] : src) {
+					v.push_back({ name, stats.first, stats.second });
+				}
+				std::sort(v.begin(), v.end(), [](const stat_entry_t& a, const stat_entry_t& b) {
+					if (a.plays != b.plays) return a.plays > b.plays;
+					return a.time > b.time;
+				});
+				return v;
+			};
+
+			std::sort(all_records.begin(), all_records.end(), [](const wrapped_record_t& a, const wrapped_record_t& b) {
+				if (a.play_count != b.play_count) return a.play_count > b.play_count;
+				return a.total_time > b.total_time;
 			});
 
+			auto top_artists = sort_stats(artist_stats);
+			auto top_albums = sort_stats(album_stats);
+
 			pfc::string_formatter report;
-			report << "=== YOUR FOOBAR2000 WRAPPED ===\n\n";
-			report << "Unique tracks logged: " << all_stats.size() << "\n";
-			report << "Total play count: " << total_global_plays << "\n";
-			report << "Total time listening: " << format_duration(total_global_time) << "\n\n";
-			report << "--- TOP 10 TRACKS ---\n";
+			report << "=== YOUR FOOBAR2000 WRAPPED ===\r\n\r\n";
+			report << "Total play count: " << total_global_plays << "\r\n";
+			report << "Total time listening: " << format_duration(total_global_time) << "\r\n\r\n";
+			
+			report << "--- TOP 5 ARTISTS ---\r\n";
+			for (size_t i = 0; i < (std::min)(top_artists.size(), (size_t)5); ++i) {
+				report << i + 1 << ". " << top_artists[i].name << " (" << top_artists[i].plays << " plays)\r\n";
+			}
+			report << "\r\n";
 
-			size_t max_top = (std::min)(all_stats.size(), (size_t)10);
-			for (size_t i = 0; i < max_top; ++i) {
-				pfc::string8 name;
-				name << all_stats[i].rec.artist << " - " << all_stats[i].rec.title;
-				report << i + 1 << ". " << name << " (" << all_stats[i].rec.play_count << " plays)\n";
+			report << "--- TOP 5 ALBUMS ---\r\n";
+			for (size_t i = 0; i < (std::min)(top_albums.size(), (size_t)5); ++i) {
+				report << i + 1 << ". " << top_albums[i].name << " (" << top_albums[i].plays << " plays)\r\n";
+			}
+			report << "\r\n";
+
+			report << "--- TOP 10 TRACKS ---\r\n";
+			for (size_t i = 0; i < (std::min)(all_records.size(), (size_t)10); ++i) {
+				report << i + 1 << ". " << all_records[i].artist << " - " << all_records[i].title << " (" << all_records[i].play_count << " plays)\r\n";
 			}
 
-			if (all_stats.size() == 0) {
-				report << "(No playback data recorded yet. Play some tracks for at least 1 minute!)\n";
+			if (all_records.size() == 0) {
+				report << "(No playback data recorded yet. Play some tracks for at least 1 minute!)\r\n";
 			}
 
-			popup_message::g_show(report, "Wrapped Statistics");
+			DlgContext ctx;
+			ctx.report = report.c_str();
+			DialogBoxParam(core_api::get_my_instance(), MAKEINTRESOURCE(IDD_WRAPPED_REPORT), core_api::get_main_window(), WrappedDlgProc, (LPARAM)&ctx);
 		}
 	};
 	static service_factory_single_t<wrapped_mainmenu> g_wrapped_mainmenu;

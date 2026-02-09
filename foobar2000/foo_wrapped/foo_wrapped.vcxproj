@@ -160,6 +160,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="foo_wrapped.rc" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\pfc\pfc.vcxproj">
