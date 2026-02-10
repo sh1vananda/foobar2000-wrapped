@@ -2,6 +2,7 @@
 #include <map>
 #include <algorithm>
 #include <vector>
+#include <fstream>
 #include "../../pfc/filetimetools.h"
 #include "resource.h"
 #include <SDK/coreDarkMode.h>
@@ -22,6 +23,21 @@ namespace {
 		pfc::string8 artist;
 		pfc::string8 title;
 		pfc::string8 album;
+	};
+
+	struct stat_entry_t {
+		pfc::string8 name;
+		uint32_t plays;
+		double time;
+	};
+
+	struct wrapped_report_data_t {
+		std::vector<wrapped_record_t> top_tracks;
+		std::vector<stat_entry_t> top_artists;
+		std::vector<stat_entry_t> top_albums;
+		uint32_t global_plays = 0;
+		double global_time = 0;
+		pfc::string8 text_report;
 	};
 
 	static metadb_index_manager::ptr theAPI() {
@@ -135,12 +151,6 @@ namespace {
 		return out.c_str();
 	}
 
-	struct stat_entry_t {
-		pfc::string8 name;
-		uint32_t plays;
-		double time;
-	};
-
 	static void copy_to_clipboard(HWND wnd, const char* text) {
 		if (OpenClipboard(wnd)) {
 			EmptyClipboard();
@@ -148,7 +158,7 @@ namespace {
 			size_t size = (wtext.length() + 1) * sizeof(wchar_t);
 			HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
 			if (hMem) {
-				void* pMem = GlobalLock(hMem);
+				void* pMem = (void*)GlobalLock(hMem);
 				if (pMem) {
 					memcpy(pMem, wtext.get_ptr(), size);
 					GlobalUnlock(hMem);
@@ -159,8 +169,94 @@ namespace {
 		}
 	}
 
+	static pfc::string8 escape_html(const char* in) {
+		pfc::string8 out;
+		while (*in) {
+			switch (*in) {
+			case '<': out += "&lt;"; break;
+			case '>': out += "&gt;"; break;
+			case '&': out += "&amp;"; break;
+			case '\"': out += "&quot;"; break;
+			case '\'': out += "&apos;"; break;
+			default: out.add_char(*in); break;
+			}
+			in++;
+		}
+		return out;
+	}
+
+	static void generate_web_wrapped(const wrapped_report_data_t& data) {
+		pfc::string_formatter html;
+		html << "<!DOCTYPE html>\n<html lang='en'>\n<head>\n";
+		html << "<meta charset='UTF-8'>\n<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n";
+		html << "<title>Your Foobar2000 Wrapped</title>\n";
+		html << "<link href='https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap' rel='stylesheet'>\n";
+		html << "<style>\n";
+		html << "body { background: #0a0a0b; color: #fff; font-family: 'Outfit', sans-serif; margin: 0; overflow-x: hidden; }\n";
+		html << ".container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }\n";
+		html << "header { text-align: center; margin-bottom: 80px; animation: fadeInDown 1s ease; }\n";
+		html << "h1 { font-size: 3.5rem; font-weight: 700; margin: 0; background: linear-gradient(135deg, #fff 0%, #a0a0ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }\n";
+		html << ".hero-stats { display: flex; gap: 20px; margin-bottom: 60px; }\n";
+		html << ".stat-card { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; backdrop-filter: blur(10px); }\n";
+		html << ".stat-val { font-size: 2.5rem; font-weight: 700; color: #ced4ff; }\n";
+		html << ".stat-label { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; margin-top: 10px; }\n";
+		html << "section { margin-bottom: 60px; animation: fadeInUp 1s ease; }\n";
+		html << "h2 { font-size: 1.8rem; margin-bottom: 30px; border-left: 4px solid #7c83ff; padding-left: 15px; }\n";
+		html << ".list { display: flex; flex-direction: column; gap: 12px; }\n";
+		html << ".item { display: flex; align-items: center; background: rgba(255,255,255,0.02); padding: 15px 25px; border-radius: 16px; transition: 0.3s; border: 1px solid transparent; }\n";
+		html << ".item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); transform: scale(1.02); }\n";
+		html << ".rank { font-size: 1.2rem; font-weight: 700; width: 40px; opacity: 0.3; }\n";
+		html << ".info { flex: 1; }\n";
+		html << ".name { font-size: 1.1rem; font-weight: 400; }\n";
+		html << ".sub { font-size: 0.85rem; opacity: 0.5; }\n";
+		html << ".count { font-weight: 700; color: #7c83ff; }\n";
+		html << "@keyframes fadeInDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }\n";
+		html << "@keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }\n";
+		html << "</style>\n</head>\n<body>\n";
+		html << "<div class='container'>\n";
+		html << "<header><h1>MY WRAPPED</h1><p style='opacity:0.5'>Playback statistics for 2026</p></header>\n";
+		
+		html << "<div class='hero-stats'>\n";
+		html << "<div class='stat-card'><div class='stat-val'>" << data.global_plays << "</div><div class='stat-label'>Total Plays</div></div>\n";
+		html << "<div class='stat-card'><div class='stat-val'>" << format_duration(data.global_time) << "</div><div class='stat-label'>Listening Time</div></div>\n";
+		html << "</div>\n";
+
+		html << "<section><h2>Top Artists</h2><div class='list'>\n";
+		for (size_t i = 0; i < (std::min)(data.top_artists.size(), (size_t)5); ++i) {
+			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(data.top_artists[i].name) << "</div></div><div class='count'>" << data.top_artists[i].plays << " plays</div></div>\n";
+		}
+		html << "</div></section>\n";
+
+		html << "<section><h2>Top Albums</h2><div class='list'>\n";
+		for (size_t i = 0; i < (std::min)(data.top_albums.size(), (size_t)5); ++i) {
+			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(data.top_albums[i].name) << "</div></div><div class='count'>" << data.top_albums[i].plays << " plays</div></div>\n";
+		}
+		html << "</div></section>\n";
+
+		html << "<section><h2>Top Tracks</h2><div class='list'>\n";
+		for (size_t i = 0; i < (std::min)(data.top_tracks.size(), (size_t)10); ++i) {
+			auto const& rec = data.top_tracks[i];
+			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(rec.title) << "</div><div class='sub'>" << escape_html(rec.artist) << " &bull; " << escape_html(rec.album) << "</div></div><div class='count'>" << rec.play_count << "</div></div>\n";
+		}
+		html << "</div></section>\n";
+
+		html << "</div>\n</body>\n</html>";
+
+		pfc::string8 path;
+		if (!uGetTempPath(path)) path = "C:\\";
+		path += "wrapped_report.html";
+
+		pfc::stringcvt::string_wide_from_utf8 wpath(path);
+		std::ofstream f(wpath.get_ptr());
+		if (f.is_open()) {
+			f << html.c_str();
+			f.close();
+			uShellExecute(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
+		}
+	}
+
 	struct DlgContext {
-		const char* report;
+		wrapped_report_data_t* data;
 		fb2k::CCoreDarkModeHooks hooks;
 	};
 
@@ -170,10 +266,8 @@ namespace {
 			{
 				DlgContext* ctx = (DlgContext*)lp;
 				SetProp(wnd, L"DLG_CONTEXT", (HANDLE)ctx);
-				
 				ctx->hooks.AddDialogWithControls(wnd);
-
-				SetDlgItemTextW(wnd, IDC_REPORT_EDIT, pfc::stringcvt::string_wide_from_utf8(ctx->report).get_ptr());
+				SetDlgItemTextW(wnd, IDC_REPORT_EDIT, pfc::stringcvt::string_wide_from_utf8(ctx->data->text_report).get_ptr());
 			}
 			return TRUE;
 		case WM_COMMAND:
@@ -185,7 +279,13 @@ namespace {
 			case IDC_COPY_CLIPBOARD:
 				{
 					DlgContext* ctx = (DlgContext*)GetProp(wnd, L"DLG_CONTEXT");
-					if (ctx && ctx->report) copy_to_clipboard(wnd, ctx->report);
+					if (ctx && ctx->data) copy_to_clipboard(wnd, ctx->data->text_report);
+				}
+				break;
+			case IDC_VIEW_WEB:
+				{
+					DlgContext* ctx = (DlgContext*)GetProp(wnd, L"DLG_CONTEXT");
+					if (ctx && ctx->data) generate_web_wrapped(*(ctx->data));
 				}
 				break;
 			}
@@ -208,19 +308,16 @@ namespace {
 			pfc::list_t<metadb_index_hash> hashes;
 			theAPI()->get_all_hashes(guid_wrapped_index, hashes);
 			
-			std::vector<wrapped_record_t> all_records;
+			wrapped_report_data_t report_data;
 			std::map<pfc::string8, std::pair<uint32_t, double>> artist_stats;
 			std::map<pfc::string8, std::pair<uint32_t, double>> album_stats;
 			
-			double total_global_time = 0;
-			uint32_t total_global_plays = 0;
-
 			for (size_t i = 0; i < hashes.get_count(); ++i) {
 				wrapped_record_t rec = record_get(hashes[i]);
 				if (rec.play_count > 0) {
-					all_records.push_back(rec);
-					total_global_time += rec.total_time;
-					total_global_plays += rec.play_count;
+					report_data.top_tracks.push_back(rec);
+					report_data.global_time += rec.total_time;
+					report_data.global_plays += rec.play_count;
 					
 					artist_stats[rec.artist].first += rec.play_count;
 					artist_stats[rec.artist].second += rec.total_time;
@@ -244,42 +341,43 @@ namespace {
 				return v;
 			};
 
-			std::sort(all_records.begin(), all_records.end(), [](const wrapped_record_t& a, const wrapped_record_t& b) {
+			std::sort(report_data.top_tracks.begin(), report_data.top_tracks.end(), [](const wrapped_record_t& a, const wrapped_record_t& b) {
 				if (a.play_count != b.play_count) return a.play_count > b.play_count;
 				return a.total_time > b.total_time;
 			});
 
-			auto top_artists = sort_stats(artist_stats);
-			auto top_albums = sort_stats(album_stats);
+			report_data.top_artists = sort_stats(artist_stats);
+			report_data.top_albums = sort_stats(album_stats);
 
 			pfc::string_formatter report;
 			report << "=== YOUR FOOBAR2000 WRAPPED ===\r\n\r\n";
-			report << "Total play count: " << total_global_plays << "\r\n";
-			report << "Total time listening: " << format_duration(total_global_time) << "\r\n\r\n";
+			report << "Total play count: " << report_data.global_plays << "\r\n";
+			report << "Total time listening: " << format_duration(report_data.global_time) << "\r\n\r\n";
 			
 			report << "--- TOP 5 ARTISTS ---\r\n";
-			for (size_t i = 0; i < (std::min)(top_artists.size(), (size_t)5); ++i) {
-				report << i + 1 << ". " << top_artists[i].name << " (" << top_artists[i].plays << " plays)\r\n";
+			for (size_t i = 0; i < (std::min)(report_data.top_artists.size(), (size_t)5); ++i) {
+				report << i + 1 << ". " << report_data.top_artists[i].name << " (" << report_data.top_artists[i].plays << " plays)\r\n";
 			}
 			report << "\r\n";
 
 			report << "--- TOP 5 ALBUMS ---\r\n";
-			for (size_t i = 0; i < (std::min)(top_albums.size(), (size_t)5); ++i) {
-				report << i + 1 << ". " << top_albums[i].name << " (" << top_albums[i].plays << " plays)\r\n";
+			for (size_t i = 0; i < (std::min)(report_data.top_albums.size(), (size_t)5); ++i) {
+				report << i + 1 << ". " << report_data.top_albums[i].name << " (" << report_data.top_albums[i].plays << " plays)\r\n";
 			}
 			report << "\r\n";
 
 			report << "--- TOP 10 TRACKS ---\r\n";
-			for (size_t i = 0; i < (std::min)(all_records.size(), (size_t)10); ++i) {
-				report << i + 1 << ". " << all_records[i].artist << " - " << all_records[i].title << " (" << all_records[i].play_count << " plays)\r\n";
+			for (size_t i = 0; i < (std::min)(report_data.top_tracks.size(), (size_t)10); ++i) {
+				report << i + 1 << ". " << report_data.top_tracks[i].artist << " - " << report_data.top_tracks[i].title << " (" << report_data.top_tracks[i].play_count << " plays)\r\n";
 			}
 
-			if (all_records.size() == 0) {
+			if (report_data.top_tracks.size() == 0) {
 				report << "(No playback data recorded yet. Play some tracks for at least 1 minute!)\r\n";
 			}
+			report_data.text_report = report;
 
 			DlgContext ctx;
-			ctx.report = report.c_str();
+			ctx.data = &report_data;
 			DialogBoxParam(core_api::get_my_instance(), MAKEINTRESOURCE(IDD_WRAPPED_REPORT), core_api::get_main_window(), WrappedDlgProc, (LPARAM)&ctx);
 		}
 	};
