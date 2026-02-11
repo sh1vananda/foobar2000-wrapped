@@ -172,13 +172,14 @@ namespace {
 	static pfc::string8 escape_html(const char* in) {
 		pfc::string8 out;
 		while (*in) {
-			switch (*in) {
+			char c = *in;
+			switch (c) {
 			case '<': out += "&lt;"; break;
 			case '>': out += "&gt;"; break;
 			case '&': out += "&amp;"; break;
 			case '\"': out += "&quot;"; break;
 			case '\'': out += "&apos;"; break;
-			default: out.add_char(*in); break;
+			default: out.add_byte(c); break;
 			}
 			in++;
 		}
@@ -187,21 +188,23 @@ namespace {
 
 	static void generate_web_wrapped(const wrapped_report_data_t& data) {
 		pfc::string_formatter html;
+		// Ensure meta charset is the very first thing
 		html << "<!DOCTYPE html>\n<html lang='en'>\n<head>\n";
-		html << "<meta charset='UTF-8'>\n<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n";
+		html << "<meta charset='UTF-8'>\n";
+		html << "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n";
 		html << "<title>Your Foobar2000 Wrapped</title>\n";
-		html << "<link href='https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap' rel='stylesheet'>\n";
+		html << "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@300;400;700&display=swap' rel='stylesheet'>\n";
 		html << "<style>\n";
-		html << "body { background: #0a0a0b; color: #fff; font-family: 'Outfit', sans-serif; margin: 0; overflow-x: hidden; }\n";
+		html << "body { background: #0a0a0b; color: #fff; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; overflow-x: hidden; }\n";
 		html << ".container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }\n";
 		html << "header { text-align: center; margin-bottom: 80px; animation: fadeInDown 1s ease; }\n";
-		html << "h1 { font-size: 3.5rem; font-weight: 700; margin: 0; background: linear-gradient(135deg, #fff 0%, #a0a0ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }\n";
+		html << "h1 { font-family: 'Outfit', sans-serif; font-size: 3.5rem; font-weight: 700; margin: 0; background: linear-gradient(135deg, #fff 0%, #a0a0ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }\n";
 		html << ".hero-stats { display: flex; gap: 20px; margin-bottom: 60px; }\n";
 		html << ".stat-card { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; backdrop-filter: blur(10px); }\n";
 		html << ".stat-val { font-size: 2.5rem; font-weight: 700; color: #ced4ff; }\n";
 		html << ".stat-label { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; margin-top: 10px; }\n";
 		html << "section { margin-bottom: 60px; animation: fadeInUp 1s ease; }\n";
-		html << "h2 { font-size: 1.8rem; margin-bottom: 30px; border-left: 4px solid #7c83ff; padding-left: 15px; }\n";
+		html << "h2 { font-family: 'Outfit', sans-serif; font-size: 1.8rem; margin-bottom: 30px; border-left: 4px solid #7c83ff; padding-left: 15px; }\n";
 		html << ".list { display: flex; flex-direction: column; gap: 12px; }\n";
 		html << ".item { display: flex; align-items: center; background: rgba(255,255,255,0.02); padding: 15px 25px; border-radius: 16px; transition: 0.3s; border: 1px solid transparent; }\n";
 		html << ".item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); transform: scale(1.02); }\n";
@@ -223,13 +226,17 @@ namespace {
 
 		html << "<section><h2>Top Artists</h2><div class='list'>\n";
 		for (size_t i = 0; i < (std::min)(data.top_artists.size(), (size_t)5); ++i) {
-			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(data.top_artists[i].name) << "</div></div><div class='count'>" << data.top_artists[i].plays << " plays</div></div>\n";
+			pfc::string8 name = data.top_artists[i].name;
+			if (name.is_empty()) name = "Unknown Artist";
+			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(name) << "</div></div><div class='count'>" << data.top_artists[i].plays << " plays</div></div>\n";
 		}
 		html << "</div></section>\n";
 
 		html << "<section><h2>Top Albums</h2><div class='list'>\n";
 		for (size_t i = 0; i < (std::min)(data.top_albums.size(), (size_t)5); ++i) {
-			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(data.top_albums[i].name) << "</div></div><div class='count'>" << data.top_albums[i].plays << " plays</div></div>\n";
+			pfc::string8 name = data.top_albums[i].name;
+			if (name.is_empty()) name = "Unknown Album";
+			html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(name) << "</div></div><div class='count'>" << data.top_albums[i].plays << " plays</div></div>\n";
 		}
 		html << "</div></section>\n";
 
@@ -247,9 +254,11 @@ namespace {
 		path += "wrapped_report.html";
 
 		pfc::stringcvt::string_wide_from_utf8 wpath(path);
-		std::ofstream f(wpath.get_ptr());
+		std::ofstream f(wpath.get_ptr(), std::ios::binary);
 		if (f.is_open()) {
-			f << html.c_str();
+			static const unsigned char bom[] = { 0xEF, 0xBB, 0xBF };
+			f.write((const char*)bom, sizeof(bom));
+			f.write(html.c_str(), html.length());
 			f.close();
 			uShellExecute(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
 		}
