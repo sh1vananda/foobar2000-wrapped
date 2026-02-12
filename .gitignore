@@ -15,6 +15,7 @@ obj/
 *.userosscache
 *.sln.docstates
 *.suo
+CLAUDE.md
 
 # Visual Studio temporary files
 *.sdf
