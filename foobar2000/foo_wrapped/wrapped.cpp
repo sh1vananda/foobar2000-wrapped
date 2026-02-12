@@ -356,6 +356,7 @@ static void generate_web_wrapped(const wrapped_report_data_t& data) {
 struct DlgContext {
 	wrapped_report_data_t* data;
 	fb2k::CCoreDarkModeHooks hooks;
+	HFONT hFont;
 };
 
 static INT_PTR CALLBACK WrappedDlgProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -365,6 +366,26 @@ static INT_PTR CALLBACK WrappedDlgProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 			DlgContext* ctx = (DlgContext*)lp;
 			SetProp(wnd, L"DLG_CONTEXT", (HANDLE)ctx);
 			ctx->hooks.AddDialogWithControls(wnd);
+			
+			// Create monospace font for proper column alignment
+			ctx->hFont = CreateFont(
+				-18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+				DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+				CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas"
+			);
+			
+			HWND hEdit = GetDlgItem(wnd, IDC_REPORT_EDIT);
+			
+			// Remove border
+			LONG style = GetWindowLong(hEdit, GWL_STYLE);
+			SetWindowLong(hEdit, GWL_STYLE, style & ~WS_BORDER);
+			LONG exStyle = GetWindowLong(hEdit, GWL_EXSTYLE);
+			SetWindowLong(hEdit, GWL_EXSTYLE, exStyle & ~WS_EX_CLIENTEDGE);
+			SetWindowPos(hEdit, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+			
+			// Set monospace font
+			SendMessage(hEdit, WM_SETFONT, (WPARAM)ctx->hFont, TRUE);
+			
 			SetDlgItemTextW(wnd, IDC_REPORT_EDIT, pfc::stringcvt::string_wide_from_utf8(ctx->data->text_report).get_ptr());
 		}
 		return TRUE;
@@ -393,7 +414,13 @@ static INT_PTR CALLBACK WrappedDlgProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 		break;
 		
 	case WM_DESTROY:
-		RemoveProp(wnd, L"DLG_CONTEXT");
+		{
+			DlgContext* ctx = (DlgContext*)GetProp(wnd, L"DLG_CONTEXT");
+			if (ctx && ctx->hFont) {
+				DeleteObject(ctx->hFont);
+			}
+			RemoveProp(wnd, L"DLG_CONTEXT");
+		}
 		break;
 	}
 	
@@ -455,29 +482,133 @@ static wrapped_report_data_t generate_report_data() {
 
 static pfc::string8 format_text_report(const wrapped_report_data_t& data) {
 	pfc::string_formatter report;
-	report << "=== YOUR FOOBAR2000 WRAPPED ===\r\n\r\n";
-	report << "Total play count: " << data.global_plays << "\r\n";
-	report << "Total time listening: " << format_duration(data.global_time) << "\r\n\r\n";
 	
-	report << "--- TOP 5 ARTISTS ---\r\n";
-	for (size_t i = 0; i < (std::min)(data.top_artists.size(), (size_t)5); ++i) {
-		report << i + 1 << ". " << data.top_artists[i].name << " (" << data.top_artists[i].plays << " plays)\r\n";
+	report << "Total plays: " << data.global_plays << "\r\n";
+	report << "Listening time: " << format_duration(data.global_time) << "\r\n";
+	report << "\r\n";
+	
+	// Top 10 Artists
+	report << "Top 10 Artists\r\n";
+	for (size_t i = 0; i < (std::min)(data.top_artists.size(), (size_t)10); ++i) {
+		pfc::string8 name = data.top_artists[i].name;
+		if (name.is_empty()) name = "Unknown Artist";
+		
+		// Convert to wide string to get actual character count
+		pfc::stringcvt::string_wide_from_utf8 wname(name);
+		size_t char_count = wcslen(wname);
+		
+		// Truncate if too long (by character count, not bytes)
+		if (char_count > 25) {
+			// Re-encode at proper length
+			pfc::string8 temp;
+			for (size_t c = 0; c < 22; c++) {
+				wchar_t buf[2] = {wname[c], 0};
+				temp << pfc::stringcvt::string_utf8_from_wide(buf);
+			}
+			temp += "...";
+			name = temp;
+			char_count = 25;
+		}
+		
+		pfc::string_formatter line;
+		line << (i + 1);
+		if (i < 9) line << " ";
+		line << ".  " << name;
+		
+		// Calculate current character width
+		pfc::stringcvt::string_wide_from_utf8 wline(line);
+		size_t current_chars = wcslen(wline);
+		
+		// Pad to column width
+		while (current_chars < 48) {
+			line << " ";
+			current_chars++;
+		}
+		line << data.top_artists[i].plays;
+		
+		report << line << "\r\n";
 	}
 	report << "\r\n";
 
-	report << "--- TOP 5 ALBUMS ---\r\n";
-	for (size_t i = 0; i < (std::min)(data.top_albums.size(), (size_t)5); ++i) {
-		report << i + 1 << ". " << data.top_albums[i].name << " (" << data.top_albums[i].plays << " plays)\r\n";
+	// Top 10 Albums
+	report << "Top 10 Albums\r\n";
+	for (size_t i = 0; i < (std::min)(data.top_albums.size(), (size_t)10); ++i) {
+		pfc::string8 name = data.top_albums[i].name;
+		if (name.is_empty()) name = "Unknown Album";
+		
+		pfc::stringcvt::string_wide_from_utf8 wname(name);
+		size_t char_count = wcslen(wname);
+		
+		if (char_count > 25) {
+			pfc::string8 temp;
+			for (size_t c = 0; c < 22; c++) {
+				wchar_t buf[2] = {wname[c], 0};
+				temp << pfc::stringcvt::string_utf8_from_wide(buf);
+			}
+			temp += "...";
+			name = temp;
+			char_count = 25;
+		}
+		
+		pfc::string_formatter line;
+		line << (i + 1);
+		if (i < 9) line << " ";
+		line << ".  " << name;
+		
+		pfc::stringcvt::string_wide_from_utf8 wline(line);
+		size_t current_chars = wcslen(wline);
+		
+		while (current_chars < 48) {
+			line << " ";
+			current_chars++;
+		}
+		line << data.top_albums[i].plays;
+		
+		report << line << "\r\n";
 	}
 	report << "\r\n";
 
-	report << "--- TOP 10 TRACKS ---\r\n";
+	// Top 10 Tracks
+	report << "Top 10 Tracks\r\n";
 	for (size_t i = 0; i < (std::min)(data.top_tracks.size(), (size_t)10); ++i) {
-		report << i + 1 << ". " << data.top_tracks[i].artist << " - " << data.top_tracks[i].title << " (" << data.top_tracks[i].play_count << " plays)\r\n";
+		auto const& rec = data.top_tracks[i];
+		
+		pfc::string8 title = rec.title;
+		if (title.is_empty()) title = "Unknown Track";
+		
+		pfc::stringcvt::string_wide_from_utf8 wtitle(title);
+		size_t char_count = wcslen(wtitle);
+		
+		if (char_count > 25) {
+			pfc::string8 temp;
+			for (size_t c = 0; c < 22; c++) {
+				wchar_t buf[2] = {wtitle[c], 0};
+				temp << pfc::stringcvt::string_utf8_from_wide(buf);
+			}
+			temp += "...";
+			title = temp;
+			char_count = 25;
+		}
+		
+		pfc::string_formatter line;
+		line << (i + 1);
+		if (i < 9) line << " ";
+		line << ".  " << title;
+		
+		pfc::stringcvt::string_wide_from_utf8 wline(line);
+		size_t current_chars = wcslen(wline);
+		
+		while (current_chars < 48) {
+			line << " ";
+			current_chars++;
+		}
+		line << rec.play_count;
+		
+		report << line << "\r\n";
 	}
 
 	if (data.top_tracks.size() == 0) {
-		report << "(No playback data recorded yet. Play some tracks!)\r\n";
+		report << "No data yet\r\n";
 	}
 	
 	return report.c_str();
