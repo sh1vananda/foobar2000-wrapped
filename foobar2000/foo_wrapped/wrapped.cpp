@@ -227,60 +227,110 @@ static void generate_web_wrapped(const wrapped_report_data_t& data) {
 	html << "<!DOCTYPE html>\n<html lang='en'>\n<head>\n";
 	html << "<meta charset='UTF-8'>\n";
 	html << "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n";
-	html << "<title>foobar2000 Wrapped</title>\n";
-	html << "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@300;400;700&display=swap' rel='stylesheet'>\n";
+	html << "<title>foobar2000 wrapped</title>\n";
+	html << "<link href='https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;700&family=Space+Mono:wght@400;700&family=Inter:wght@200;400;900&display=swap' rel='stylesheet'>\n";
 	html << "<style>\n";
-	html << "body { background: #0a0a0b; color: #fff; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; overflow-x: hidden; }\n";
-	html << ".container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }\n";
-	html << "header { text-align: center; margin-bottom: 80px; animation: fadeInDown 1s ease; }\n";
-	html << "h1 { font-family: 'Outfit', sans-serif; font-size: 3.5rem; font-weight: 700; margin: 0; background: linear-gradient(135deg, #fff 0%, #a0a0ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }\n";
-	html << ".hero-stats { display: flex; gap: 20px; margin-bottom: 60px; }\n";
-	html << ".stat-card { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; backdrop-filter: blur(10px); }\n";
-	html << ".stat-val { font-size: 2.5rem; font-weight: 700; color: #ced4ff; }\n";
-	html << ".stat-label { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; margin-top: 10px; }\n";
-	html << "section { margin-bottom: 60px; animation: fadeInUp 1s ease; }\n";
-	html << "h2 { font-family: 'Outfit', sans-serif; font-size: 1.8rem; margin-bottom: 30px; border-left: 4px solid #7c83ff; padding-left: 15px; }\n";
-	html << ".list { display: flex; flex-direction: column; gap: 12px; }\n";
-	html << ".item { display: flex; align-items: center; background: rgba(255,255,255,0.02); padding: 15px 25px; border-radius: 16px; transition: 0.3s; border: 1px solid transparent; }\n";
-	html << ".item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); transform: scale(1.02); }\n";
-	html << ".rank { font-size: 1.2rem; font-weight: 700; width: 40px; opacity: 0.3; }\n";
-	html << ".info { flex: 1; }\n";
-	html << ".name { font-size: 1.1rem; font-weight: 400; }\n";
-	html << ".sub { font-size: 0.85rem; opacity: 0.5; }\n";
-	html << ".count { font-weight: 700; color: #7c83ff; }\n";
-	html << "@keyframes fadeInDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }\n";
-	html << "@keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }\n";
+	html << "* { margin: 0; padding: 0; box-sizing: border-box; }\n";
+	html << "body { font-family: 'Inter', sans-serif; background: #000; color: #fff; overflow-x: hidden; }\n";
+	html << ".container { max-width: 1400px; margin: 0 auto; padding: 40px 30px; }\n";
+	html << ".header { margin-bottom: 50px; }\n";
+	html << ".header h1 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(3rem, 10vw, 8rem); font-weight: 400; letter-spacing: 0.05em; line-height: 0.9; margin-bottom: 10px; }\n";
+	html << ".header .year { font-family: 'Space Mono', monospace; font-size: clamp(1rem, 3vw, 1.5rem); opacity: 0.4; border-left: 3px solid #fff; padding-left: 20px; }\n";
+	html << ".section { margin-bottom: 60px; position: relative; }\n";
+	html << ".section-title { font-family: 'Oswald', sans-serif; font-size: clamp(1.5rem, 4vw, 3rem); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 30px; position: relative; display: inline-block; }\n";
+	html << ".section-title::after { content: ''; position: absolute; bottom: -8px; left: 0; width: 60px; height: 4px; background: #fff; }\n";
+	html << ".stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2px; background: #fff; border: 2px solid #fff; }\n";
+	html << ".stat-box { background: #000; padding: 40px 30px; text-align: center; border: none; transition: all 0.3s ease; }\n";
+	html << ".stat-box:hover { background: #fff; color: #000; }\n";
+	html << ".stat-number { font-family: 'Bebas Neue', sans-serif; font-size: clamp(3rem, 8vw, 6rem); font-weight: 400; line-height: 1; margin-bottom: 12px; letter-spacing: 0.05em; }\n";
+	html << ".stat-label { font-family: 'Space Mono', monospace; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; }\n";
+	html << ".top-list { border: 2px solid #fff; padding: 30px; }\n";
+	html << ".highlight-item { padding: 35px 0; border-bottom: 2px solid #fff; margin-bottom: 25px; }\n";
+	html << ".highlight-label { font-family: 'Space Mono', monospace; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.4; margin-bottom: 15px; }\n";
+	html << ".highlight-name { font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.5rem, 6vw, 5rem); font-weight: 400; line-height: 1; margin-bottom: 12px; letter-spacing: 0.05em; }\n";
+	html << ".highlight-stats { font-family: 'Space Mono', monospace; font-size: 1.1rem; opacity: 0.5; }\n";
+	html << ".list-item { display: grid; grid-template-columns: 60px 1fr auto; gap: 20px; align-items: center; padding: 18px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.2s ease; }\n";
+	html << ".list-item:last-child { border-bottom: none; }\n";
+	html << ".list-item:hover { background: rgba(255, 255, 255, 0.02); padding-left: 15px; margin-left: -15px; padding-right: 15px; margin-right: -15px; }\n";
+	html << ".item-rank { font-family: 'Oswald', sans-serif; font-size: 2rem; font-weight: 700; opacity: 0.2; }\n";
+	html << ".item-info h3 { font-family: 'Oswald', sans-serif; font-size: 1.4rem; font-weight: 600; margin-bottom: 5px; }\n";
+	html << ".item-info p { font-family: 'Space Mono', monospace; font-size: 0.85rem; opacity: 0.5; }\n";
+	html << ".item-count { font-family: 'Oswald', sans-serif; font-size: 1.6rem; font-weight: 700; text-align: right; }\n";
+	html << ".item-count span { display: block; font-family: 'Space Mono', monospace; font-size: 0.65rem; font-weight: 400; opacity: 0.4; margin-top: 3px; }\n";
+	html << ".footer { text-align: center; padding: 40px 0 25px; margin-top: 60px; }\n";
+	html << ".footer-logo { margin-bottom: 15px; }\n";
+	html << ".footer-logo img { opacity: 0.6; transition: opacity 0.3s ease; }\n";
+	html << ".footer-logo img:hover { opacity: 1; }\n";
+	html << ".footer p { font-family: 'Space Mono', monospace; font-size: 0.85rem; opacity: 0.4; }\n";
+	html << "@media (max-width: 768px) { .list-item { grid-template-columns: 40px 1fr auto; gap: 15px; } .item-rank { font-size: 1.5rem; } .item-info h3 { font-size: 1.1rem; } .item-count { font-size: 1.3rem; } }\n";
 	html << "</style>\n</head>\n<body>\n";
-	html << "<div class='container'>\n";
-	html << "<header><h1>foobar2000 wrapped</h1><p style='opacity:0.5'>Playback statistics for 2026</p></header>\n";
 	
-	html << "<div class='hero-stats'>\n";
-	html << "<div class='stat-card'><div class='stat-val'>" << data.global_plays << "</div><div class='stat-label'>Total Plays</div></div>\n";
-	html << "<div class='stat-card'><div class='stat-val'>" << format_duration(data.global_time) << "</div><div class='stat-label'>Listening Time</div></div>\n";
-	html << "</div>\n";
+	html << "<div class='container'>\n";
+	html << "<header class='header'>\n<h1>foobar2000<br>wrapped</h1>\n<p class='year'>2026 playback stats</p>\n</header>\n";
 
-	html << "<section><h2>Top Artists</h2><div class='list'>\n";
-	for (size_t i = 0; i < (std::min)(data.top_artists.size(), (size_t)5); ++i) {
+	html << "<section class='section'>\n<div class='stats-grid'>\n";
+	html << "<div class='stat-box'><div class='stat-number'>" << data.global_plays << "</div><div class='stat-label'>Plays</div></div>\n";
+	html << "<div class='stat-box'><div class='stat-number'>" << format_duration(data.global_time) << "</div><div class='stat-label'>Hours</div></div>\n";
+	html << "<div class='stat-box'><div class='stat-number'>" << data.top_artists.size() << "</div><div class='stat-label'>Artists</div></div>\n";
+	html << "</div>\n</section>\n";
+
+	html << "<section class='section'>\n<h2 class='section-title'>Top Artists</h2>\n<div class='top-list'>\n";
+	if (data.top_artists.size() > 0) {
+		pfc::string8 name = data.top_artists[0].name;
+		if (name.is_empty()) name = "Unknown Artist";
+		html << "<div class='highlight-item'>\n<div class='highlight-label'>01 &middot; Most Played</div>\n";
+		html << "<div class='highlight-name'>" << escape_html(name) << "</div>\n";
+		html << "<div class='highlight-stats'>" << data.top_artists[0].plays << " plays</div>\n</div>\n";
+	}
+	for (size_t i = 1; i < (std::min)(data.top_artists.size(), (size_t)10); ++i) {
 		pfc::string8 name = data.top_artists[i].name;
 		if (name.is_empty()) name = "Unknown Artist";
-		html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(name) << "</div></div><div class='count'>" << data.top_artists[i].plays << " plays</div></div>\n";
+		html << "<div class='list-item'>\n<div class='item-rank'>";
+		if (i < 9) html << "0";
+		html << i + 1 << "</div>\n<div class='item-info'><h3>" << escape_html(name) << "</h3></div>\n";
+		html << "<div class='item-count'>" << data.top_artists[i].plays << "\n<span>PLAYS</span></div>\n</div>\n";
 	}
-	html << "</div></section>\n";
+	html << "</div>\n</section>\n";
 
-	html << "<section><h2>Top Albums</h2><div class='list'>\n";
-	for (size_t i = 0; i < (std::min)(data.top_albums.size(), (size_t)5); ++i) {
+	html << "<section class='section'>\n<h2 class='section-title'>Top Albums</h2>\n<div class='top-list'>\n";
+	if (data.top_albums.size() > 0) {
+		pfc::string8 name = data.top_albums[0].name;
+		if (name.is_empty()) name = "Unknown Album";
+		html << "<div class='highlight-item'>\n<div class='highlight-label'>01 &middot; Most Played</div>\n";
+		html << "<div class='highlight-name'>" << escape_html(name) << "</div>\n";
+		html << "<div class='highlight-stats'>" << data.top_albums[0].plays << " plays</div>\n</div>\n";
+	}
+	for (size_t i = 1; i < (std::min)(data.top_albums.size(), (size_t)10); ++i) {
 		pfc::string8 name = data.top_albums[i].name;
 		if (name.is_empty()) name = "Unknown Album";
-		html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(name) << "</div></div><div class='count'>" << data.top_albums[i].plays << " plays</div></div>\n";
+		html << "<div class='list-item'>\n<div class='item-rank'>";
+		if (i < 9) html << "0";
+		html << i + 1 << "</div>\n<div class='item-info'><h3>" << escape_html(name) << "</h3></div>\n";
+		html << "<div class='item-count'>" << data.top_albums[i].plays << "\n<span>PLAYS</span></div>\n</div>\n";
 	}
-	html << "</div></section>\n";
+	html << "</div>\n</section>\n";
 
-	html << "<section><h2>Top Tracks</h2><div class='list'>\n";
-	for (size_t i = 0; i < (std::min)(data.top_tracks.size(), (size_t)10); ++i) {
-		auto const& rec = data.top_tracks[i];
-		html << "<div class='item'><div class='rank'>" << i + 1 << "</div><div class='info'><div class='name'>" << escape_html(rec.title) << "</div><div class='sub'>" << escape_html(rec.artist) << " &bull; " << escape_html(rec.album) << "</div></div><div class='count'>" << rec.play_count << "</div></div>\n";
+	html << "<section class='section'>\n<h2 class='section-title'>Top Tracks</h2>\n<div class='top-list'>\n";
+	if (data.top_tracks.size() > 0) {
+		auto const& rec = data.top_tracks[0];
+		html << "<div class='highlight-item'>\n<div class='highlight-label'>01 &middot; Most Played</div>\n";
+		html << "<div class='highlight-name'>" << escape_html(rec.title) << "</div>\n";
+		html << "<div class='highlight-stats'>" << escape_html(rec.artist) << " &middot; " << escape_html(rec.album) << " &middot; " << rec.play_count << " plays</div>\n</div>\n";
 	}
-	html << "</div></section>\n";
+	for (size_t i = 1; i < (std::min)(data.top_tracks.size(), (size_t)10); ++i) {
+		auto const& rec = data.top_tracks[i];
+		html << "<div class='list-item'>\n<div class='item-rank'>";
+		if (i < 9) html << "0";
+		html << i + 1 << "</div>\n<div class='item-info'>\n<h3>" << escape_html(rec.title) << "</h3>\n";
+		html << "<p>" << escape_html(rec.artist) << " &middot; " << escape_html(rec.album) << "</p>\n</div>\n";
+		html << "<div class='item-count'>" << rec.play_count << "\n<span>PLAYS</span></div>\n</div>\n";
+	}
+	html << "</div>\n</section>\n";
+
+	html << "<footer class='footer'>\n";
+	html << "<div class='footer-logo'><a href='https://www.foobar2000.org/' title='foobar2000 homepage'>";
+	html << "<img src='https://www.foobar2000.org/button.png' alt='foobar2000 audio player' width='88' height='31' /></a></div>\n";
+	html << "<p>Generated by foobar2000 wrapped</p>\n</footer>\n";
 
 	html << "</div>\n</body>\n</html>";
 
